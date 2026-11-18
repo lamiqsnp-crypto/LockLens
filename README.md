@@ -47,7 +47,7 @@ Scans run locally. The tool does not upload files, delete the target, install a 
 
 The executable is currently unsigned.
 
-## Version 1.2.0
+## Version 1.0
 
 - Compact interface with advanced actions in the More menu.
 - File and folder handle inspection alongside Windows usage reports.
