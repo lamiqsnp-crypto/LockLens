@@ -1,4 +1,4 @@
-## LockLens v1.2.0
+## LockLens v1.0
 
 A portable Windows tool for finding programs that are using a file or folder.
 
