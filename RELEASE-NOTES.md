@@ -4,7 +4,7 @@ A portable Windows tool for finding programs that are using a file or folder.
 
 ### Download and run
 
-Download **占用查找器-图标修复版.zip**, extract it, and double-click **占用查找器.exe**. No installation is required.
+Download **LockLens.zip**, extract it, and double-click **占用查找器.exe**. No installation is required.
 
 Supports **64-bit Windows 10 and Windows 11**. The current interface is in **Simplified Chinese**.
 
