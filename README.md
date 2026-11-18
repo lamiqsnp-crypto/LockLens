@@ -1,54 +1,80 @@
 # LockLens
+
+[English](#english) · [简体中文](#简体中文)
+
+## English
+
 LockLens is a portable Windows tool that finds which programs are using a file or folder. View related processes, open program locations, copy reports, or close a process with confirmation. No installation required. All checks run locally.
 
-## Download
+### Download and run
 
-Get the portable Windows x64 package from [Releases](https://github.com/lamiqsnp-crypto/Program-Resource-Monitor/releases/latest).
+Download **[LockLens.zip](https://github.com/lamiqsnp-crypto/LockLens/releases/latest/download/LockLens.zip)** from the [latest release](https://github.com/lamiqsnp-crypto/LockLens/releases/latest), extract it, and run **LockLens.exe**.
 
-Extract the ZIP, then double-click `占用查找器.exe`. The current interface is in Simplified Chinese.
+**Version:** 1.0 · **Requirements:** Windows 10/11 x64, .NET Framework 4.5+ (included with Windows 10/11).
 
-**Requirements:** 64-bit Windows 10 or Windows 11 with the built-in .NET Framework (4.5 or later).
+### Use
 
-## Use
+1. Drop a file/folder into the window, paste its full path, or choose **File / Folder**.
+2. Click **Search**. Select a result to see the executable location and related paths.
+3. Save your work and close the relevant application before retrying your file operation.
 
-1. Drag in a file or folder, paste its full path, or use **选文件 / 选文件夹**.
-2. Click **查找** to find programs using the target. Click **停止** to cancel a scan.
-3. Select a result to see the process ID, executable location, and related paths.
-4. Save your work and close the relevant application before retrying your file operation.
+**More** contains the full report, Task Manager, and administrator restart. **End process** first requests normal closure; forcing a process to stop requires another confirmation and may lose unsaved work.
 
-**更多** contains the full report, Task Manager, and an option to restart as administrator. Ending a process requires confirmation; forcing it to stop requires a second confirmation.
+### Language
 
-## What the results mean
+Choose **More → Language / 语言 → English / 简体中文**. Controls, reports, and application prompts update immediately. The preference is saved in **%LOCALAPPDATA%\LockLens\language.txt** for the next launch. On first launch, Chinese Windows uses Simplified Chinese; other systems use English.
 
-- **系统报告占用:** Windows Restart Manager reports that the process is using a file in the target.
-- **发现打开句柄:** The process has an open handle to the target or a path inside it. An open handle may still allow deletion.
+The language menu is unavailable during scanning or process closure. Windows-provided dialogs, button captions, and OS error messages follow the system display language.
 
-Folder scans check directory handles and files inside the folder. Some protected processes cannot be inspected, even as administrator. Network shares should be checked on the computer hosting them. The complete report lists access restrictions, timeouts, and traversal limits. A scan with no results does not guarantee that a file can be deleted.
+### Results and limits
 
-## Build from source
+- **Windows reports usage:** Windows Restart Manager reports that the process uses a file in the target.
+- **Open handle found:** the process opened the target or a path inside it. This handle may still allow deletion.
 
-No external NuGet packages are required. Open PowerShell in the source folder and run:
+Directory handles and files inside the selected folder are checked. Folder traversal for Windows verification is limited to 20,000 files or 10 seconds; inaccessible directories and internal directory links are skipped. Handle scanning independently checks accessible processes, using isolated workers with timeouts.
 
-```powershell
-powershell -File .\build.ps1
-```
+Protected processes may remain inaccessible even as administrator. Check network shares on the hosting computer. No results do not guarantee deletion is possible: permissions, drivers, or temporary usage may still block it. The full report lists incomplete checks.
 
-This creates `LockLens.exe`. To compile and run the real file-lock regression tests:
+### Build and verify
 
-```powershell
-powershell -File .\build.ps1 -Test
-```
+Open PowerShell in the source directory:
 
-The icon is already included. Regenerating it with `make_icon.py` is optional and requires Python with Pillow.
+    powershell -File .\build.ps1
 
-## Privacy and behavior
+This builds **LockLens.exe**. Build and run file-lock, folder-handle, Unicode-path, cancellation, process identity, taskbar icon, language switching, and preference persistence checks:
 
-Scans run locally. The tool does not upload files, delete the target, install a background service, or uninstall applications. Force-ending a process can lose unsaved work or interrupt a service.
+    powershell -File .\build.ps1 -Test
 
-The executable is currently unsigned.
+No external NuGet packages are needed. LockLens.ico is included; optionally regenerate it with make_icon.py using Python and Pillow.
 
-## Version 1.0
+### Privacy
 
-- Compact interface with advanced actions in the More menu.
-- File and folder handle inspection alongside Windows usage reports.
-- Fixed the taskbar icon association for the portable application.
+LockLens does not upload files, delete the target, uninstall software, or install a background service. Its only saved preference is the language. The executable is unsigned.
+
+## 简体中文
+
+LockLens 是免安装的 Windows 文件占用查找工具。文件或文件夹无法删除、重命名或移动时，可查看相关程序、进程 ID、程序位置及路径。
+
+### 下载与使用
+
+下载 **[LockLens.zip](https://github.com/lamiqsnp-crypto/LockLens/releases/latest/download/LockLens.zip)**，解压后运行 **LockLens.exe**。版本统一为 **1.0**，支持 Windows 10/11 64 位。
+
+1. 拖入文件或文件夹，也可粘贴路径或点击“选文件 / 选文件夹”。
+2. 点击“查找”，选中结果查看详情。
+3. 先保存工作并正常关闭相关程序，再尝试操作目标。
+
+“更多”提供完整报告、任务管理器、管理员重试和语言切换。结束进程先确认正常关闭，强制结束需再次确认，可能丢失未保存内容。
+
+### 切换语言
+
+**更多 → Language / 语言 → 简体中文 / English**，立即生效并保存到 **%LOCALAPPDATA%\LockLens\language.txt**。首次启动：中文 Windows 默认简体中文，其他系统默认英文。
+
+扫描和关闭进程期间暂不可切换。Windows 系统提供的对话框、按钮及错误消息仍跟随系统显示语言。
+
+### 检测限制
+
+“系统报告占用”表示 Windows 报告程序使用目标内的文件；“发现打开句柄”不一定阻止删除。文件夹系统核实最多遍历 20,000 个文件或 10 秒，跳过无权限目录和内部链接；句柄扫描独立检查可访问进程。
+
+受保护进程可能无法读取，网络共享应在共享所在电脑检查。未发现结果不代表一定可以删除；完整报告列出检查限制。所有检查在本机完成，不上传文件、不删除目标、不安装后台服务，仅保存语言偏好。
+
+构建方法见上方英文部分。

@@ -13,10 +13,10 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32.SafeHandles;
 
-[assembly: System.Reflection.AssemblyTitle("占用查找器")]
-[assembly: System.Reflection.AssemblyDescription("查找正在使用文件或文件夹的 Windows 程序")]
-[assembly: System.Reflection.AssemblyProduct("LockLens 占用查找器")]
-[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyTitle("LockLens")]
+[assembly: System.Reflection.AssemblyDescription("Find programs using a file or folder")]
+[assembly: System.Reflection.AssemblyProduct("LockLens")]
+[assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 
 namespace LockLens {
     internal static class Program {
@@ -29,11 +29,17 @@ namespace LockLens {
             if (args.Length > 0 && args[0] == "--hold") return SelfTest.Hold(args);
             if (args.Length > 0 && args[0] == "--self-test") return SelfTest.Run(args);
             if (args.Length > 0 && args[0] == "--ui-check") return SelfTest.CheckWindow(args);
+            L10n.Load();
+            string initialPath = "";
+            for (int i = 0; i < args.Length; i++) {
+                if (args[i] == "--language" && i + 1 < args.Length) { string code = args[++i]; L10n.English = code == "en"; }
+                else initialPath = args[i];
+            }
             AppIdentity.Configure();
             try { Native.SetProcessDPIAware(); } catch { }
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-            Application.ThreadException += delegate(object s, ThreadExceptionEventArgs e) { MessageBox.Show(e.Exception.Message, "操作未完成", MessageBoxButtons.OK, MessageBoxIcon.Information); };
-            Application.Run(new MainForm(args.Length > 0 ? args[0] : "")); return 0;
+            Application.ThreadException += delegate(object s, ThreadExceptionEventArgs e) { MessageBox.Show(e.Exception.Message, L10n.T("操作未完成"), MessageBoxButtons.OK, MessageBoxIcon.Information); };
+            Application.Run(new MainForm(initialPath)); return 0;
         }
     }
 
@@ -97,7 +103,7 @@ namespace LockLens {
                 // Set all relaunch properties BEFORE publishing the window AppUserModelID.
                 SetString(store, 2, Program.QuotePath(Program.Exe));
                 SetString(store, 3, Program.Exe + ",0");
-                SetString(store, 4, "占用查找器");
+                SetString(store, 4, "LockLens");
                 SetString(store, 5, Id);
                 Marshal.ThrowExceptionForHR(store.Commit());
             } finally { Marshal.ReleaseComObject(store); }
@@ -126,7 +132,7 @@ namespace LockLens {
     internal sealed class Hit {
         internal int Pid; internal string Name = "", Image = ""; internal long Started;
         internal bool Confirmed; internal HashSet<string> Paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        internal string Kind { get { return Confirmed ? "系统报告占用" : "发现打开句柄"; } }
+        internal string Kind { get { return Confirmed ? L10n.T("系统报告占用") : L10n.T("发现打开句柄"); } }
     }
     internal sealed class ScanResult {
         internal List<Hit> Hits = new List<Hit>(); internal int Denied, TimedOut, FileCount;
@@ -137,12 +143,12 @@ namespace LockLens {
     internal static class Scanner {
         internal static ScanResult Scan(string input, CancellationToken token, Action<string> progress) {
             ScanResult result = new ScanResult(); bool folder = Directory.Exists(input);
-            if (!folder && !File.Exists(input)) throw new IOException("路径不存在或当前账户没有访问权限。请检查路径。");
+            if (!folder && !File.Exists(input)) throw new IOException(L10n.T("路径不存在或当前账户没有访问权限。请检查路径。"));
             string target = Native.ResolvePath(Path.GetFullPath(input));
             var hits = new ConcurrentDictionary<int, Hit>();
-            progress("正在读取 Windows 文件句柄…");
+            progress(L10n.T("正在读取 Windows 文件句柄…"));
             List<ScanJob> jobs = null;
-            try { jobs = Native.GetJobs(); } catch (Exception ex) { result.Notes.Add("文件句柄扫描未完成：" + ex.Message); }
+            try { jobs = Native.GetJobs(); } catch (Exception ex) { result.Notes.Add(L10n.T("文件句柄扫描未完成：") + ex.Message); }
             if (jobs != null) {
                 int done = 0;
                 Parallel.ForEach(jobs, new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = 8 }, job => {
@@ -152,7 +158,7 @@ namespace LockLens {
                     if (probe == IntPtr.Zero) {
                         if (Marshal.GetLastWin32Error() == 5) Interlocked.Increment(ref result.Denied);
                         int skipped = Interlocked.Increment(ref done);
-                        progress("正在检查进程 " + skipped + " / " + jobs.Count + " · 已找到 " + hits.Count + " 个程序");
+                        progress(L10n.T("正在检查进程 ") + skipped + " / " + jobs.Count + L10n.T(" · 已找到 ") + hits.Count + L10n.T(" 个程序"));
                         return;
                     }
                     Native.CloseHandle(probe);
@@ -184,11 +190,11 @@ namespace LockLens {
                     } catch (Exception ex) { if (!(ex is System.ComponentModel.Win32Exception) || ((System.ComponentModel.Win32Exception)ex).NativeErrorCode != 87) Interlocked.Increment(ref result.TimedOut); }
                     finally { if (p != null) { try { if (!p.HasExited) p.Kill(); } catch { } p.Dispose(); } }
                     int count = Interlocked.Increment(ref done);
-                    progress("正在检查进程 " + count + " / " + jobs.Count + " · 已找到 " + hits.Count + " 个程序");
+                    progress(L10n.T("正在检查进程 ") + count + " / " + jobs.Count + L10n.T(" · 已找到 ") + hits.Count + L10n.T(" 个程序"));
                 });
             }
             token.ThrowIfCancellationRequested();
-            progress("正在向 Windows 核实占用情况…");
+            progress(L10n.T("正在向 Windows 核实占用情况…"));
             var files = new List<string>();
             if (folder) {
                 var dirs = new Stack<string>(); dirs.Push(input); var watch = Stopwatch.StartNew();
@@ -214,16 +220,16 @@ namespace LockLens {
                 try {
                     foreach (var item in RestartManager.Query(batch)) {
                         Hit hit = hits.GetOrAdd(item.Item1, id => ReadProcess(id));
-                        lock (hit) { hit.Confirmed = true; if (hit.Name == "" || hit.Name == "未知程序") hit.Name = item.Item2; }
+                        lock (hit) { hit.Confirmed = true; if (hit.Name == "" || hit.Name == L10n.T("未知程序")) hit.Name = item.Item2; }
                     }
-                } catch (Exception ex) { result.Notes.Add("Windows 占用核实未完成：" + ex.Message); break; }
+                } catch (Exception ex) { result.Notes.Add(L10n.T("Windows 占用核实未完成：") + ex.Message); break; }
             }
             token.ThrowIfCancellationRequested();
             result.Hits = hits.Values.OrderByDescending(h => h.Confirmed).ThenBy(h => h.Name).ToList();
             return result;
         }
         internal static Hit ReadProcess(int pid) {
-            Hit h = new Hit { Pid = pid, Name = "未知程序" };
+            Hit h = new Hit { Pid = pid, Name = L10n.T("未知程序") };
             try { using (var p = Process.GetProcessById(pid)) {
                 h.Name = p.ProcessName; try { h.Started = p.StartTime.ToUniversalTime().Ticks; } catch { }
                 IntPtr handle = Native.OpenProcess(0x1000, false, pid);
@@ -268,24 +274,24 @@ namespace LockLens {
         internal static List<ScanJob> GetJobs() {
             // Identify the File object type from our own known handle; type indexes vary by Windows boot.
             using (var own = CreateFile(Program.Exe, 0, 7, IntPtr.Zero, 3, 0, IntPtr.Zero)) {
-                if (own.IsInvalid) throw new IOException("无法创建用于识别文件句柄的引用。");
+                if (own.IsInvalid) throw new IOException(L10n.T("无法创建用于识别文件句柄的引用。"));
                 int size = 1024 * 1024, needed; IntPtr buffer = IntPtr.Zero;
                 try {
                     while (true) {
                         buffer = Marshal.AllocHGlobal(size); int status = NtQuerySystemInformation(64, buffer, size, out needed);
                         if (status == 0) break;
                         Marshal.FreeHGlobal(buffer); buffer = IntPtr.Zero;
-                        if (status != unchecked((int)0xC0000004)) throw new IOException("系统句柄接口返回 0x" + status.ToString("X8"));
-                        size = Math.Max(size * 2, needed + 65536); if (size > 256 * 1024 * 1024) throw new IOException("系统句柄数量过多。");
+                        if (status != unchecked((int)0xC0000004)) throw new IOException(L10n.T("系统句柄接口返回 0x") + status.ToString("X8"));
+                        size = Math.Max(size * 2, needed + 65536); if (size > 256 * 1024 * 1024) throw new IOException(L10n.T("系统句柄数量过多。"));
                     }
                     long count = Marshal.ReadInt64(buffer); int stride = Marshal.SizeOf(typeof(HandleEntry)); int header = IntPtr.Size * 2;
-                    if (count < 0 || count > (size - header) / stride) throw new IOException("系统句柄数据长度异常。");
+                    if (count < 0 || count > (size - header) / stride) throw new IOException(L10n.T("系统句柄数据长度异常。"));
                     int self = Process.GetCurrentProcess().Id; ulong ownHandle = unchecked((ulong)own.DangerousGetHandle().ToInt64()); ushort fileType = 0;
                     for (long i = 0; i < count; i++) {
                         var e = (HandleEntry)Marshal.PtrToStructure(IntPtr.Add(buffer, header + checked((int)(i * stride))), typeof(HandleEntry));
                         if (e.Pid.ToUInt64() == (ulong)self && e.Handle.ToUInt64() == ownHandle) { fileType = e.Type; break; }
                     }
-                    if (fileType == 0) throw new IOException("无法识别此系统的文件句柄类型。");
+                    if (fileType == 0) throw new IOException(L10n.T("无法识别此系统的文件句柄类型。"));
                     var groups = new Dictionary<int, ScanJob>();
                     for (long i = 0; i < count; i++) {
                         var e = (HandleEntry)Marshal.PtrToStructure(IntPtr.Add(buffer, header + checked((int)(i * stride))), typeof(HandleEntry));
@@ -337,7 +343,7 @@ namespace LockLens {
         internal static List<Tuple<int, string>> Query(string[] files) {
             var output = new List<Tuple<int, string>>(); if (files.Length == 0) return output;
             uint session; int error = RmStartSession(out session, 0, new StringBuilder(33));
-            if (error != 0) throw new IOException("无法建立 Windows 占用核实会话（错误 " + error + "）：" + new System.ComponentModel.Win32Exception(error).Message);
+            if (error != 0) throw new IOException(L10n.T("无法建立 Windows 占用核实会话（错误 ") + error + "）：" + new System.ComponentModel.Win32Exception(error).Message);
             try {
                 error = RmRegisterResources(session, (uint)files.Length, files, 0, IntPtr.Zero, 0, IntPtr.Zero);
                 if (error != 0) throw new System.ComponentModel.Win32Exception(error);
@@ -355,13 +361,17 @@ namespace LockLens {
     internal sealed class MainForm : Form {
         readonly Color Ink = Color.FromArgb(28, 40, 59), Muted = Color.FromArgb(98, 111, 131), Accent = Color.FromArgb(39, 99, 220);
         TextBox path, details; Button scan, end, locate, copy, file, folder; ListView list;
-        ToolStripMenuItem admin, fullReport; ContextMenuStrip moreMenu; Icon smallIcon, largeIcon;
+        ToolStripMenuItem admin, fullReport, language, chinese, english; ContextMenuStrip moreMenu; Icon smallIcon, largeIcon;
+        readonly Dictionary<Control, string> labels = new Dictionary<Control, string>();
+        readonly Dictionary<ToolStripItem, string> menuLabels = new Dictionary<ToolStripItem, string>();
+        readonly List<string> columnLabels = new List<string>();
+        bool hasScanned;
         Label status, count; ProgressBar bar; CancellationTokenSource cancellation; ScanResult last; string scannedPath = "";
         bool closing, ending; bool IsAdmin { get { using (var id = WindowsIdentity.GetCurrent()) return new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator); } }
         internal MainForm(string initial) {
-            Text = "占用查找器"; Font = new Font("Microsoft YaHei UI", 9F); ForeColor = Ink;
+            Text = "LockLens 1.0"; Font = new Font("Microsoft YaHei UI", 9F); ForeColor = Ink;
             BackColor = Color.White; StartPosition = FormStartPosition.CenterScreen;
-            AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(880, 550); MinimumSize = new Size(760, 480);
+            AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(940, 550); MinimumSize = new Size(850, 480);
             smallIcon = AppIdentity.LoadIcon(16); largeIcon = AppIdentity.LoadIcon(48);
             Icon = largeIcon; ShowIcon = true; ShowInTaskbar = true; AllowDrop = true;
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16, 12, 16, 10), ColumnCount = 1, RowCount = 6 };
@@ -371,42 +381,48 @@ namespace LockLens {
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
             Controls.Add(root);
             var selector = new TableLayoutPanel { Dock = DockStyle.Fill, Margin = Padding.Empty, RowCount = 2, ColumnCount = 4 };
-            selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 94));
+            selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100)); selector.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
             selector.RowStyles.Add(new RowStyle(SizeType.Absolute, 25)); selector.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
-            var label = new Label { Text = "文件或文件夹  ·  支持拖入或粘贴路径", Dock = DockStyle.Fill, ForeColor = Muted, AutoSize = true, Margin = Padding.Empty };
+            var label = new Label { Text = L10n.T("文件或文件夹  ·  支持拖入或粘贴路径"), Dock = DockStyle.Fill, ForeColor = Muted, AutoSize = true, Margin = Padding.Empty };
             selector.Controls.Add(label, 0, 0); selector.SetColumnSpan(label, 4);
-            path = new TextBox { Dock = DockStyle.Fill, Text = initial, Margin = new Padding(0, 5, 7, 0), BorderStyle = BorderStyle.FixedSingle, AccessibleName = "目标路径" };
+            path = new TextBox { Dock = DockStyle.Fill, Text = initial, Margin = new Padding(0, 5, 7, 0), BorderStyle = BorderStyle.FixedSingle, AccessibleName = L10n.T("目标路径") };
             path.KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter && cancellation == null && scan.Enabled) { e.SuppressKeyPress = true; StartScan(); } };
             selector.Controls.Add(path, 0, 1);
-            file = MakeButton("选文件", false); folder = MakeButton("选文件夹", false); scan = MakeButton("查找", true);
+            file = MakeButton(L10n.T("选文件"), false); folder = MakeButton(L10n.T("选文件夹"), false); scan = MakeButton(L10n.T("查找"), true);
             file.Dock = folder.Dock = scan.Dock = DockStyle.Fill;
             selector.Controls.Add(file, 1, 1); selector.Controls.Add(folder, 2, 1); selector.Controls.Add(scan, 3, 1);
-            file.Click += delegate { using (var d = new OpenFileDialog { Title = "选择需要检查的文件", CheckFileExists = true }) if (d.ShowDialog(this) == DialogResult.OK) path.Text = d.FileName; };
-            folder.Click += delegate { using (var d = new FolderBrowserDialog { Description = "选择需要检查的文件夹", ShowNewFolderButton = false }) if (d.ShowDialog(this) == DialogResult.OK) path.Text = d.SelectedPath; };
+            file.Click += delegate { using (var d = new OpenFileDialog { Title = L10n.T("选择需要检查的文件"), CheckFileExists = true }) if (d.ShowDialog(this) == DialogResult.OK) path.Text = d.FileName; };
+            folder.Click += delegate { using (var d = new FolderBrowserDialog { Description = L10n.T("选择需要检查的文件夹"), ShowNewFolderButton = false }) if (d.ShowDialog(this) == DialogResult.OK) path.Text = d.SelectedPath; };
             scan.Click += delegate {
                 if (cancellation == null) StartScan();
-                else { cancellation.Cancel(); scan.Enabled = false; scan.Text = "停止中"; status.Text = "正在停止…"; }
+                else { cancellation.Cancel(); scan.Enabled = false; scan.Text = L10n.T("停止中"); status.Text = L10n.T("正在停止…"); }
             }; root.Controls.Add(selector, 0, 0);
-            count = new Label { Text = "占用程序", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty }; root.Controls.Add(count, 0, 1);
+            count = new Label { Text = L10n.T("占用程序"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty }; root.Controls.Add(count, 0, 1);
             list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BorderStyle = BorderStyle.FixedSingle, BackColor = Color.White, Margin = Padding.Empty };
-            list.Columns.Add("程序", 170); list.Columns.Add("PID", 65); list.Columns.Add("检测结果", 130); list.Columns.Add("相关路径", 430);
+            list.Columns.Add(L10n.T("程序"), 170); list.Columns.Add("PID", 65); list.Columns.Add(L10n.T("检测结果"), 180); list.Columns.Add(L10n.T("相关路径"), 430);
             list.Resize += delegate { if (list.Columns.Count == 4) list.Columns[3].Width = Math.Max(140, list.ClientSize.Width - list.Columns[0].Width - list.Columns[1].Width - list.Columns[2].Width - 5); };
             list.SelectedIndexChanged += delegate { ShowSelection(); }; root.Controls.Add(list, 0, 2);
-            details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, WordWrap = true, BackColor = Color.FromArgb(248, 249, 251), BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(0, 9, 0, 5), Text = "选中结果可查看程序位置和相关文件。", AccessibleName = "程序详情" };
+            details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, WordWrap = true, BackColor = Color.FromArgb(248, 249, 251), BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(0, 9, 0, 5), Text = L10n.T("选中结果可查看程序位置和相关文件。"), AccessibleName = L10n.T("程序详情") };
             root.Controls.Add(details, 0, 3);
             var actions = new TableLayoutPanel { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(0, 4, 0, 4), RowCount = 1, ColumnCount = 5 };
-            foreach (float width in new float[] { 112, 112, 104 }) actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
+            foreach (float width in new float[] { 112, 130, 112 }) actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            locate = MakeButton("程序位置", false); locate.Enabled = false;
-            end = MakeButton("结束进程…", false); end.ForeColor = Color.FromArgb(171, 48, 55); end.Enabled = false;
-            copy = MakeButton("复制报告", false); copy.Enabled = false;
-            var more = MakeButton("更多 ▾", false); locate.Dock = end.Dock = copy.Dock = more.Dock = DockStyle.Fill;
+            locate = MakeButton(L10n.T("程序位置"), false); locate.Enabled = false;
+            end = MakeButton(L10n.T("结束进程…"), false); end.ForeColor = Color.FromArgb(171, 48, 55); end.Enabled = false;
+            copy = MakeButton(L10n.T("复制报告"), false); copy.Enabled = false;
+            var more = MakeButton(L10n.T("更多 ▾"), false); locate.Dock = end.Dock = copy.Dock = more.Dock = DockStyle.Fill;
             actions.Controls.Add(locate, 0, 0); actions.Controls.Add(end, 1, 0); actions.Controls.Add(copy, 2, 0); actions.Controls.Add(more, 4, 0); root.Controls.Add(actions, 0, 4);
             moreMenu = new ContextMenuStrip { Font = Font };
-            fullReport = new ToolStripMenuItem("查看完整报告…"); fullReport.Enabled = false;
-            var task = new ToolStripMenuItem("打开任务管理器");
-            admin = new ToolStripMenuItem(IsAdmin ? "已是管理员" : "以管理员身份重试"); admin.Enabled = !IsAdmin;
+            fullReport = new ToolStripMenuItem(L10n.T("查看完整报告…")); fullReport.Enabled = false;
+            var task = new ToolStripMenuItem(L10n.T("打开任务管理器"));
+            admin = new ToolStripMenuItem(IsAdmin ? L10n.T("已是管理员") : L10n.T("以管理员身份重试")); admin.Enabled = !IsAdmin;
             moreMenu.Items.AddRange(new ToolStripItem[] { fullReport, task, new ToolStripSeparator(), admin });
+            language = new ToolStripMenuItem("Language / 语言");
+            chinese = new ToolStripMenuItem("简体中文"); english = new ToolStripMenuItem("English");
+            language.DropDownItems.AddRange(new ToolStripItem[] { chinese, english });
+            moreMenu.Items.Add(new ToolStripSeparator()); moreMenu.Items.Add(language);
+            chinese.Click += delegate { SwitchLanguage(false, true); };
+            english.Click += delegate { SwitchLanguage(true, true); };
             more.Click += delegate { moreMenu.Show(more, new Point(0, more.Height)); };
             admin.Click += Elevate;
             fullReport.Click += delegate { ShowReport(); };
@@ -415,11 +431,65 @@ namespace LockLens {
             copy.Click += delegate { TryAction(() => Clipboard.SetText(Report())); };
             end.Click += EndProcess;
             var foot = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-            status = new Label { Text = "就绪", Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft, ForeColor = Muted, AutoEllipsis = true }; foot.Controls.Add(status);
+            status = new Label { Text = L10n.T("就绪"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft, ForeColor = Muted, AutoEllipsis = true }; foot.Controls.Add(status);
             bar = new ProgressBar { Dock = DockStyle.Top, Height = 3, Visible = false, Style = ProgressBarStyle.Marquee }; foot.Controls.Add(bar); root.Controls.Add(foot, 0, 5);
             DragEnter += delegate(object s, DragEventArgs e) { e.Effect = cancellation == null && !ending && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; };
             DragDrop += delegate(object s, DragEventArgs e) { var names = e.Data.GetData(DataFormats.FileDrop) as string[]; if (cancellation == null && !ending && names != null && names.Length > 0) path.Text = names[0]; };
             FormClosing += delegate { closing = true; if (cancellation != null) cancellation.Cancel(); };
+            CaptureLabels(this);
+            foreach (ColumnHeader column in list.Columns) columnLabels.Add(L10n.Source(column.Text));
+            foreach (ToolStripItem item in new ToolStripItem[] { fullReport, task, admin }) menuLabels.Add(item, L10n.Source(item.Text));
+            chinese.Checked = !L10n.English; english.Checked = L10n.English;
+        }
+        void CaptureLabels(Control control) {
+            if (control != path && control != details && control != status && control != count && !(control is Form) && !String.IsNullOrEmpty(control.Text)) labels[control] = L10n.Source(control.Text);
+            foreach (Control child in control.Controls) CaptureLabels(child);
+        }
+        internal void SwitchLanguage(bool useEnglish, bool persist) {
+            if (cancellation != null || ending) return;
+            L10n.English = useEnglish;
+            foreach (var pair in labels) pair.Key.Text = L10n.T(pair.Value);
+            foreach (var pair in menuLabels) pair.Key.Text = L10n.T(pair.Value);
+            for (int i = 0; i < list.Columns.Count; i++) list.Columns[i].Text = L10n.T(columnLabels[i]);
+            path.AccessibleName = L10n.T("目标路径"); details.AccessibleName = L10n.T("程序详情");
+            chinese.Checked = !useEnglish; english.Checked = useEnglish;
+            if (last != null) {
+                foreach (ListViewItem row in list.Items) {
+                    var hit = (Hit)row.Tag; row.SubItems[2].Text = hit.Kind;
+                    if (hit.Paths.Count == 0) row.SubItems[3].Text = L10n.T("Windows 报告涉及目标中的文件（未提供具体路径）");
+                }
+                count.Text = L10n.T("占用程序  ·  ") + last.Hits.Count + L10n.T(" 个结果");
+                bool incomplete = last.Denied > 0 || last.TimedOut > 0 || last.Limited || last.Notes.Count > 0;
+                status.Text = (last.Hits.Count > 0 ? L10n.T("查找完成") : L10n.T("未发现占用")) + (incomplete ? L10n.T(" · 部分项目未能检查，详见“更多 → 查看完整报告”") : L10n.T(" · 先关闭相关程序，再尝试删除"));
+                details.Text = last.Hits.Count == 0 ? L10n.T("本次未发现占用。也可能是权限、系统保护或短暂占用导致，具体信息可查看完整报告。") : L10n.T("选中结果可查看程序位置和相关文件。");
+            } else {
+                count.Text = hasScanned ? L10n.T("查找已停止") : L10n.T("占用程序");
+                status.Text = hasScanned ? L10n.T("已停止查找 · 可以重新开始") : L10n.T("就绪");
+                details.Text = hasScanned ? L10n.T("本次检查已取消，未生成完整结果。") : L10n.T("选中结果可查看程序位置和相关文件。");
+            }
+            Busy(false);
+            if (persist) try { L10n.Save(); }
+            catch (Exception ex) { MessageBox.Show(this, (useEnglish ? "Language changed, but the preference could not be saved.\r\n" : "语言已切换，但无法保存下次启动的偏好。\r\n") + ex.Message, "LockLens", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+        }
+        internal void VerifyLanguages() {
+            bool oldLanguage = L10n.English; string samplePath = @"D:\测试\sample.txt";
+            IntPtr listHandle = list.Handle;
+            last = new ScanResult();
+            var hit = new Hit { Name = "SampleApp", Pid = 12345, Image = @"D:\SampleApp.exe" }; hit.Paths.Add(samplePath); last.Hits.Add(hit);
+            var row = new ListViewItem(new string[] { hit.Name, "12345", hit.Kind, samplePath }) { Tag = hit }; list.Items.Add(row);
+            row.Selected = true; scannedPath = samplePath; hasScanned = true;
+            try {
+                SwitchLanguage(true, false);
+                if (scan.Text != "Search" || file.Text != "File" || list.Columns[2].Text != "Result" || !english.Checked || chinese.Checked) throw new Exception("English controls did not update.");
+                if (row.SubItems[2].Text != "Open handle found" || !details.Text.Contains("Program: ") || !details.Text.Contains(samplePath)) throw new Exception("English result details lost their selection or paths.");
+                if (!Report().StartsWith("LockLens scan report") || !Report().Contains("Open handle found")) throw new Exception("English report did not update.");
+                SwitchLanguage(false, false);
+                if (scan.Text != "查找" || file.Text != "选文件" || list.Columns[2].Text != "检测结果" || !chinese.Checked || english.Checked) throw new Exception("Chinese controls did not update.");
+                if (row.SubItems[2].Text != "发现打开句柄" || !Report().StartsWith("占用查找器检查报告")) throw new Exception("Chinese results or report did not update.");
+                if (!details.Text.Contains(samplePath) || list.SelectedItems.Count != 1) throw new Exception("Language switch changed selection or file paths.");
+            } finally {
+                last = null; list.Items.Clear(); scannedPath = ""; hasScanned = false; SwitchLanguage(oldLanguage, false);
+            }
         }
         protected override void OnHandleCreated(EventArgs e) {
             base.OnHandleCreated(e);
@@ -432,7 +502,7 @@ namespace LockLens {
             if (disposing) { if (smallIcon != null) smallIcon.Dispose(); if (largeIcon != null) largeIcon.Dispose(); if (moreMenu != null) moreMenu.Dispose(); }
         }
         void ShowReport() {
-            using (var dialog = new Form { Text = "检查报告", Size = new Size(760, 520), MinimumSize = new Size(550, 380), StartPosition = FormStartPosition.CenterParent, Font = Font, Icon = largeIcon, ShowInTaskbar = false }) {
+            using (var dialog = new Form { Text = L10n.T("检查报告"), Size = new Size(760, 520), MinimumSize = new Size(550, 380), StartPosition = FormStartPosition.CenterParent, Font = Font, Icon = largeIcon, ShowInTaskbar = false }) {
                 var text = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, WordWrap = true, ScrollBars = ScrollBars.Vertical, Text = Report(), BackColor = Color.White };
                 dialog.Padding = new Padding(12); dialog.Controls.Add(text); dialog.ShowDialog(this);
             }
@@ -441,17 +511,17 @@ namespace LockLens {
             var b = new Button { Text = text, Height = 34, Dock = DockStyle.None, FlatStyle = FlatStyle.Flat, BackColor = primary ? Accent : Color.White, ForeColor = primary ? Color.White : Ink, Cursor = Cursors.Hand, Margin = new Padding(3, 0, 3, 0), UseVisualStyleBackColor = false, AutoSize = false, Width = 112 };
             b.FlatAppearance.BorderColor = primary ? Accent : Color.FromArgb(216, 223, 234); return b;
         }
-        void TryAction(Action action) { try { action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "操作未完成", MessageBoxButtons.OK, MessageBoxIcon.Information); } }
+        void TryAction(Action action) { try { action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, L10n.T("操作未完成"), MessageBoxButtons.OK, MessageBoxIcon.Information); } }
         void Ui(Action action) { if (closing || IsDisposed || !IsHandleCreated) return; try { BeginInvoke((MethodInvoker)delegate { if (!closing) action(); }); } catch (InvalidOperationException) { } }
-        void Busy(bool busy) { scan.Enabled = !ending; scan.Text = busy ? "停止" : "查找"; path.Enabled = file.Enabled = folder.Enabled = !busy && !ending; bar.Visible = busy; admin.Enabled = !busy && !ending && !IsAdmin; fullReport.Enabled = copy.Enabled = !busy && !ending && last != null; ShowSelection(); }
+        void Busy(bool busy) { scan.Enabled = !ending; scan.Text = busy ? L10n.T("停止") : L10n.T("查找"); path.Enabled = file.Enabled = folder.Enabled = !busy && !ending; bar.Visible = busy; language.Enabled = !busy && !ending; admin.Enabled = !busy && !ending && !IsAdmin; fullReport.Enabled = copy.Enabled = !busy && !ending && last != null; ShowSelection(); }
         async void StartScan() {
             if (cancellation != null || ending) return;
             string input = Environment.ExpandEnvironmentVariables(path.Text.Trim().Trim('"'));
-            if (String.IsNullOrWhiteSpace(input)) { MessageBox.Show(this, "先选择一个文件或文件夹，也可以直接拖入窗口。", "选择目标", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-            if (input.StartsWith(@"\\", StringComparison.Ordinal)) { MessageBox.Show(this, "当前版本用于本机磁盘。网络共享的占用需要在共享所在电脑上检查。", "网络路径", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-            try { input = Path.GetFullPath(input); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "路径无效"); return; }
-            if (!Directory.Exists(input) && !File.Exists(input)) { MessageBox.Show(this, "路径不存在或当前账户没有访问权限。", "无法访问路径", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-            scannedPath = input; path.Text = input; last = null; list.Items.Clear(); count.Text = "正在查找…"; details.Clear();
+            if (String.IsNullOrWhiteSpace(input)) { MessageBox.Show(this, L10n.T("先选择一个文件或文件夹，也可以直接拖入窗口。"), L10n.T("选择目标"), MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            if (input.StartsWith(@"\\", StringComparison.Ordinal)) { MessageBox.Show(this, L10n.T("当前版本用于本机磁盘。网络共享的占用需要在共享所在电脑上检查。"), L10n.T("网络路径"), MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            try { input = Path.GetFullPath(input); } catch (Exception ex) { MessageBox.Show(this, ex.Message, L10n.T("路径无效")); return; }
+            if (!Directory.Exists(input) && !File.Exists(input)) { MessageBox.Show(this, L10n.T("路径不存在或当前账户没有访问权限。"), L10n.T("无法访问路径"), MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            hasScanned = true; scannedPath = input; path.Text = input; last = null; list.Items.Clear(); count.Text = L10n.T("正在查找…"); details.Clear();
             cancellation = new CancellationTokenSource(); var source = cancellation; Busy(true);
             long lastUpdate = 0;
             try {
@@ -462,64 +532,64 @@ namespace LockLens {
                 if (closing) return;
                 last = found;
                 foreach (var hit in found.Hits) {
-                    var row = new ListViewItem(new string[] { hit.Name, hit.Pid.ToString(), hit.Kind, hit.Paths.Count == 0 ? "Windows 报告涉及目标中的文件（未提供具体路径）" : String.Join(" ; ", hit.Paths.Take(3).ToArray()) });
+                    var row = new ListViewItem(new string[] { hit.Name, hit.Pid.ToString(), hit.Kind, hit.Paths.Count == 0 ? L10n.T("Windows 报告涉及目标中的文件（未提供具体路径）") : String.Join(" ; ", hit.Paths.Take(3).ToArray()) });
                     row.Tag = hit; list.Items.Add(row);
                 }
-                count.Text = "占用程序  ·  " + found.Hits.Count + " 个结果";
+                count.Text = L10n.T("占用程序  ·  ") + found.Hits.Count + L10n.T(" 个结果");
                 bool incomplete = found.Denied > 0 || found.TimedOut > 0 || found.Limited || found.Notes.Count > 0;
-                status.Text = (found.Hits.Count > 0 ? "查找完成" : "未发现占用") + (incomplete ? " · 部分项目未能检查，详见“更多 → 查看完整报告”" : " · 先关闭相关程序，再尝试删除");
-                details.Text = found.Hits.Count == 0 ? "本次未发现占用。也可能是权限、系统保护或短暂占用导致，具体信息可查看完整报告。" : "选中结果可查看程序位置和相关文件。";
+                status.Text = (found.Hits.Count > 0 ? L10n.T("查找完成") : L10n.T("未发现占用")) + (incomplete ? L10n.T(" · 部分项目未能检查，详见“更多 → 查看完整报告”") : L10n.T(" · 先关闭相关程序，再尝试删除"));
+                details.Text = found.Hits.Count == 0 ? L10n.T("本次未发现占用。也可能是权限、系统保护或短暂占用导致，具体信息可查看完整报告。") : L10n.T("选中结果可查看程序位置和相关文件。");
                 if (list.Items.Count > 0) list.Items[0].Selected = true;
-            } catch (OperationCanceledException) { if (!closing) { status.Text = "已停止查找 · 可以重新开始"; count.Text = "查找已停止"; details.Text = "本次检查已取消，未生成完整结果。"; } }
-            catch (Exception ex) { if (!closing) { status.Text = "查找未完成"; details.Text = ex.Message + "\r\n可尝试以管理员身份重新运行。"; count.Text = "查找未完成"; } }
+            } catch (OperationCanceledException) { if (!closing) { status.Text = L10n.T("已停止查找 · 可以重新开始"); count.Text = L10n.T("查找已停止"); details.Text = L10n.T("本次检查已取消，未生成完整结果。"); } }
+            catch (Exception ex) { if (!closing) { status.Text = L10n.T("查找未完成"); details.Text = ex.Message + L10n.T("\r\n可尝试以管理员身份重新运行。"); count.Text = L10n.T("查找未完成"); } }
             finally { cancellation = null; source.Dispose(); if (!closing) Busy(false); }
         }
         Hit Selected() { return list.SelectedItems.Count == 1 ? list.SelectedItems[0].Tag as Hit : null; }
         string Summary(ScanResult r) {
             var b = new StringBuilder();
-            if (r.Hits.Count == 0) b.AppendLine("未发现占用不等于一定可以删除。权限、受保护文件、驱动、短暂占用或其他电脑的网络连接也可能导致失败。");
-            b.AppendLine("系统报告占用：Windows Restart Manager 认为此进程正在使用目标中的文件。");
-            b.AppendLine("发现打开句柄：此进程打开了目标或其内部路径；该句柄可能允许删除。");
-            b.AppendLine("无法访问的进程：" + r.Denied + "；超时/退出等未完整检查：" + r.TimedOut + "。" + (!IsAdmin && r.Denied > 0 ? "可从“更多”菜单以管理员身份重试。" : ""));
-            if (r.Limited) b.AppendLine("文件遍历受限：最多核实 20,000 个文件 / 10 秒；跳过无权限目录和内部链接目录。句柄扫描仍覆盖可读取的进程。");
-            foreach (string note in r.Notes) b.AppendLine(note);
+            if (r.Hits.Count == 0) b.AppendLine(L10n.T("未发现占用不等于一定可以删除。权限、受保护文件、驱动、短暂占用或其他电脑的网络连接也可能导致失败。"));
+            b.AppendLine(L10n.T("系统报告占用：Windows Restart Manager 认为此进程正在使用目标中的文件。"));
+            b.AppendLine(L10n.T("发现打开句柄：此进程打开了目标或其内部路径；该句柄可能允许删除。"));
+            b.AppendLine(L10n.T("无法访问的进程：") + r.Denied + L10n.T("；超时/退出等未完整检查：") + r.TimedOut + "。" + (!IsAdmin && r.Denied > 0 ? L10n.T("可从“更多”菜单以管理员身份重试。") : ""));
+            if (r.Limited) b.AppendLine(L10n.T("文件遍历受限：最多核实 20,000 个文件 / 10 秒；跳过无权限目录和内部链接目录。句柄扫描仍覆盖可读取的进程。"));
+            foreach (string note in r.Notes) b.AppendLine(L10n.TranslateMessage(note));
             return b.ToString();
         }
         void ShowSelection() {
             Hit h = Selected(); bool ready = cancellation == null && !ending && h != null;
             locate.Enabled = ready && !String.IsNullOrEmpty(h.Image); end.Enabled = ready && h.Pid > 4 && h.Started != 0 && h.Pid != Process.GetCurrentProcess().Id;
             if (h == null) return;
-            details.Text = "程序：" + (h.Image == "" ? h.Name + "（无法读取程序位置）" : h.Image) + "\r\n相关路径：" + (h.Paths.Count == 0 ? "Windows 未提供具体路径" : String.Join("；", h.Paths.ToArray())) + (h.Confirmed ? "" : "\r\n提示：打开句柄不一定阻止删除。");
+            details.Text = L10n.T("程序：") + (h.Image == "" ? h.Name + L10n.T("（无法读取程序位置）") : h.Image) + L10n.T("\r\n相关路径：") + (h.Paths.Count == 0 ? L10n.T("Windows 未提供具体路径") : String.Join("；", h.Paths.ToArray())) + (h.Confirmed ? "" : L10n.T("\r\n提示：打开句柄不一定阻止删除。"));
         }
         string Report() {
-            var b = new StringBuilder("占用查找器检查报告\r\n"); b.AppendLine("时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); b.AppendLine("目标：" + scannedPath);
+            var b = new StringBuilder(L10n.T("占用查找器检查报告\r\n")); b.AppendLine(L10n.T("时间：") + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); b.AppendLine(L10n.T("目标：") + scannedPath);
             if (last == null) return b.ToString(); b.AppendLine(Summary(last));
-            foreach (var h in last.Hits) { b.AppendLine(h.Name + " | PID " + h.Pid + " | " + h.Kind); b.AppendLine("程序：" + h.Image); foreach (string p in h.Paths) b.AppendLine("  " + p); b.AppendLine(); }
+            foreach (var h in last.Hits) { b.AppendLine(h.Name + " | PID " + h.Pid + " | " + h.Kind); b.AppendLine(L10n.T("程序：") + h.Image); foreach (string p in h.Paths) b.AppendLine("  " + p); b.AppendLine(); }
             return b.ToString();
         }
         void Elevate(object sender, EventArgs e) {
-            try { var si = new ProcessStartInfo(Program.Exe); si.UseShellExecute = true; si.Verb = "runas"; if (!String.IsNullOrWhiteSpace(path.Text)) si.Arguments = Program.QuotePath(path.Text.Trim().Trim('"')); Process.Start(si); Close(); }
-            catch (System.ComponentModel.Win32Exception ex) { if (ex.NativeErrorCode != 1223) MessageBox.Show(this, ex.Message, "无法以管理员身份启动"); }
+            try { var si = new ProcessStartInfo(Program.Exe); si.UseShellExecute = true; si.Verb = "runas"; si.Arguments = "--language " + (L10n.English ? "en" : "zh-CN"); if (!String.IsNullOrWhiteSpace(path.Text)) si.Arguments += " " + Program.QuotePath(path.Text.Trim().Trim('"')); Process.Start(si); Close(); }
+            catch (System.ComponentModel.Win32Exception ex) { if (ex.NativeErrorCode != 1223) MessageBox.Show(this, ex.Message, L10n.T("无法以管理员身份启动")); }
         }
         async void EndProcess(object sender, EventArgs e) {
             Hit h = Selected(); if (h == null || cancellation != null || ending) return;
             ending = true; Busy(false);
             try {
                 using (var p = Process.GetProcessById(h.Pid)) {
-                    if (!Scanner.IsSameProcess(h, p)) { MessageBox.Show(this, "该进程已退出或发生变化，请重新查找。", "请刷新结果"); return; }
-                    bool critical; if (IsCritical(p, out critical) && critical) { MessageBox.Show(this, "这是 Windows 关键进程，不能在本工具中结束。", "受保护的进程"); return; }
-                    if (MessageBox.Show(this, "准备关闭 " + h.Name + "（PID " + h.Pid + "）。\r\n请先保存该程序中尚未保存的内容。\r\n\r\n继续发送正常关闭请求？", "关闭选中程序", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    if (!Scanner.IsSameProcess(h, p)) { MessageBox.Show(this, L10n.T("该进程已退出或发生变化，请重新查找。"), L10n.T("请刷新结果")); return; }
+                    bool critical; if (IsCritical(p, out critical) && critical) { MessageBox.Show(this, L10n.T("这是 Windows 关键进程，不能在本工具中结束。"), L10n.T("受保护的进程")); return; }
+                    if (MessageBox.Show(this, L10n.T("准备关闭 ") + h.Name + "（PID " + h.Pid + L10n.T("）。\r\n请先保存该程序中尚未保存的内容。\r\n\r\n继续发送正常关闭请求？"), L10n.T("关闭选中程序"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
                     end.Enabled = false; bool requested = p.CloseMainWindow();
                     if (requested) await Task.Run(() => p.WaitForExit(1800));
                     if (!p.HasExited) {
-                        if (MessageBox.Show(this, (requested ? "程序尚未退出，可能正在提示保存文件。" : "该进程没有可正常关闭的主窗口。") + "\r\n\r\n是否强制结束 " + h.Name + "（PID " + h.Pid + "）？\r\n未保存的内容可能丢失，相关服务也可能中断。", "确认强制结束", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                        if (MessageBox.Show(this, (requested ? L10n.T("程序尚未退出，可能正在提示保存文件。") : L10n.T("该进程没有可正常关闭的主窗口。")) + L10n.T("\r\n\r\n是否强制结束 ") + h.Name + "（PID " + h.Pid + L10n.T("）？\r\n未保存的内容可能丢失，相关服务也可能中断。"), L10n.T("确认强制结束"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
                         if (!Scanner.IsSameProcess(h, p)) return;
                         p.Kill(); await Task.Run(() => p.WaitForExit(2500));
                     }
-                    status.Text = "已发送结束请求 · 请重新查找后再尝试删除";
+                    status.Text = L10n.T("已发送结束请求 · 请重新查找后再尝试删除");
                 }
-            } catch (ArgumentException) { status.Text = "进程已经退出，请重新查找"; }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message + "\r\n可尝试管理员重试，或手动关闭该程序。", "未能结束进程", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+            } catch (ArgumentException) { status.Text = L10n.T("进程已经退出，请重新查找"); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message + L10n.T("\r\n可尝试管理员重试，或手动关闭该程序。"), L10n.T("未能结束进程"), MessageBoxButtons.OK, MessageBoxIcon.Information); }
             finally { ending = false; if (!closing) Busy(false); }
         }
         [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsProcessCritical(IntPtr process, out bool critical);
@@ -541,9 +611,20 @@ namespace LockLens {
                     Assert(AppIdentity.ShellIconIsCustom(), "Windows Shell extracts custom artwork from the executable", log);
                     Assert(AppIdentity.WindowString(window, 2) == Program.QuotePath(Program.Exe), "taskbar relaunch command points to this executable", log);
                     Assert(AppIdentity.WindowString(window, 3) == Program.Exe + ",0", "taskbar relaunch icon points to this executable's icon", log);
-                    Assert(AppIdentity.WindowString(window, 4) == "占用查找器", "taskbar relaunch display name is set", log);
+                    Assert(AppIdentity.WindowString(window, 4) == "LockLens", "taskbar relaunch display name is set", log);
                     Assert(AppIdentity.WindowString(window, 5) == AppIdentity.Id, "window and process use the same explicit taskbar identity", log);
+                    form.VerifyLanguages();
+                    Assert(true, "English/Chinese controls, result labels, reports and selection survive live switching", log);
                 }
+                string previousPath = L10n.SettingsPath; bool previousLanguage = L10n.English;
+                string settings = Path.Combine(Path.GetTempPath(), "LockLens-Language-" + Guid.NewGuid().ToString("N"), "language.txt");
+                try {
+                    L10n.SettingsPath = settings; L10n.English = true; L10n.Save(); L10n.English = false; L10n.Load();
+                    Assert(L10n.English, "English preference survives settings reload", log);
+                    L10n.English = false; L10n.Save(); L10n.English = true; L10n.Load();
+                    Assert(!L10n.English, "Chinese preference survives settings reload", log);
+                } finally { L10n.SettingsPath = previousPath; L10n.English = previousLanguage; if (File.Exists(settings)) File.Delete(settings); if (Directory.Exists(Path.GetDirectoryName(settings))) Directory.Delete(Path.GetDirectoryName(settings)); }
+                Assert(L10n.Values.All(t => !System.Text.RegularExpressions.Regex.IsMatch(t, "[\u4e00-\u9fff]")), "all English translation values contain no untranslated Chinese", log);
                 log.AppendLine("ALL WINDOW CHECKS PASSED"); return 0;
             } catch (Exception ex) { log.AppendLine("FAIL " + ex); return 1; }
             finally { if (args.Length > 1) File.WriteAllText(args[1], log.ToString(), new UTF8Encoding(true)); }

@@ -1,0 +1,17 @@
+# Local builds and test output
+*.exe
+*.pdb
+*.zip
+test-results*.txt
+window-checks*.txt
+bin/
+obj/
+dist/
+
+# Local editor files
+.vs/
+.vscode/
+.idea/
+*.user
+Thumbs.db
+Desktop.ini

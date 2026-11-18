@@ -1,57 +1,46 @@
-﻿占用查找器 · LockLens 1.0
-=======================
+﻿LockLens 1.0
+============
 
-用途
-当 Windows 提示文件或文件夹“正在使用”“无法删除/重命名”时，找出可能涉及的程序。
-这是占用诊断工具。它不会卸载软件、删除目标、强行关闭系统句柄或安装后台服务。
+使用方法
+1. 双击 LockLens.exe。支持 Windows 10/11 64 位，无需安装。
+2. 拖入文件或文件夹，也可粘贴完整路径。
+3. 点击“查找”，选中结果查看程序位置与相关路径。
+4. 先保存工作并正常关闭对应程序，再尝试删除、重命名或移动。
 
-直接使用
-1. 双击“占用查找器.exe”。无需安装，无需 Python、Java 或联网。
-2. 拖入无法删除的文件/文件夹，或使用“选文件”“选文件夹”。也可以粘贴完整路径。
-3. 点击“查找”，等待结果。文件夹会同时检查其自身和内部文件。
-4. 点击一行可查看程序名称、PID、程序位置和相关路径。
-5. 先保存工作并正常退出涉及的程序，再重新查找并尝试删除。
-6. 如普通权限未找到结果或提示访问受限，可打开“更多”菜单，点击“以管理员身份重试”。
-   Windows 可能显示 UAC 提示，由你决定是否允许。提升后请再点“查找”。
+语言切换
+更多 → Language / 语言 → 简体中文 / English。
+立即生效，并保存在 %LOCALAPPDATA%\LockLens\language.txt。
+首次启动：中文 Windows 默认简体中文，其他系统默认英文。
+扫描和结束进程期间暂不可切换；系统对话框和 OS 错误消息使用系统语言。
 
-检测结果怎么看
-• 系统报告占用：Windows Restart Manager 报告该程序正在使用目标中的某个文件。
-  如果只由系统报告发现，Windows 可能不提供具体是哪一个子文件。
-• 发现打开句柄：发现程序打开了目标路径或内部路径。某些句柄允许删除，所以这只是线索。
-• 同一个程序通常合并成一行，详细区域列出发现的不同路径。
-• “未发现占用”并不能保证一定可以删除。权限、驱动、短暂占用、系统保护等也可能阻止操作。
-• 未能检查的进程数、超时数、文件遍历限制可从“更多 → 查看完整报告”或复制的报告中查看。
+其他操作与限制
+“更多”提供完整报告、任务管理器和管理员重试。
+结束进程先尝试正常关闭；强制结束需再次确认，可能丢失未保存内容或中断服务。
+“系统报告占用”来自 Windows；“发现打开句柄”不一定阻止删除。
+未发现结果不能保证一定可以删除，也可能受权限、驱动或短暂占用影响。
+受保护系统进程可能无法检查；网络共享请在共享所在电脑检查。
+文件夹系统核实最多遍历 20,000 个文件或 10 秒，跳过无权限目录和内部链接。
+句柄扫描独立检查可访问进程，每个工作进程限时 4.5 秒。
 
-其他按钮
-• 程序位置：在资源管理器中选中该程序的可执行文件。
-• 打开任务管理器：便于进一步查看程序或服务。
-• 复制报告：复制本次目标、检测结果和检查限制，便于排查。
-• 结束进程：先弹出确认并发送正常关闭请求；如程序未退出，会另行确认是否强制结束。
-  强制结束可能丢失未保存的内容或中断服务。工具不提供批量强制结束功能。
-  若原进程已经变化，需重新检查后再操作。Windows 关键进程不允许在本工具中结束。
+隐私
+不联网、不上传文件、不删除目标、不卸载软件、不安装后台服务。
+仅保存语言偏好。删除程序文件及语言偏好目录即可完整移除。
+程序未进行商业代码签名。
 
-适用范围与边界
-• 适合 64 位 Windows 10 / 11，使用系统自带的 .NET Framework（4.5+）。
-• 当前版本检查本机文件；网络共享应在共享所在电脑运行工具。
-• 管理员模式仍可能无法读取受保护的系统/安全进程。
-• Windows 文件句柄接口与 Restart Manager 互相补充；结果是扫描时的快照。
-• 文件夹核实最多遍历 20,000 个文件或 10 秒；无权限目录、内部符号链接/联接目录会跳过。
-  文件句柄扫描仍然覆盖能够读取的进程，独立检查进程的等待上限为 4.5 秒。
-• 如果某个程序只是把文件载入内存后关闭文件，其句柄可能不再存在。
-• 不建议直接检查整块系统磁盘。优先选择实际无法操作的文件夹。
-• 程序没有商业代码签名。若 Windows 提示未知发布者，这是发布者身份信息，不代表检测结果。
+English
+-------
+Run LockLens.exe, select/drop a file or folder, and click Search.
+Select a result to view process IDs, program locations, and related paths.
+Use More → Language / 语言 to choose English or Simplified Chinese.
+The preference is saved in %LOCALAPPDATA%\LockLens\language.txt.
+Save your work before closing a program; forcing a process to stop requires
+another confirmation and may lose unsaved data or interrupt services.
+All checks run locally. Protected processes may be inaccessible. No results
+do not guarantee deletion is possible; see the full report for scan limits.
+Requires Windows 10/11 x64 and .NET Framework 4.5+ (included with Windows 10/11).
+The executable is unsigned. OS dialogs and errors use the system language.
 
-文件与隐私
-整个工具在本机工作，不联网、不上传、不发送报告。
-目标文件不会被修改。管理员提升、结束进程均由你手动选择。
-退出即可停止使用；删除本工具文件即可移除。
-
-源码
-源码包中有 LockLens.cs、app.manifest、LockLens.ico 和 build.ps1。
-在源码目录运行 powershell -File .\build.ps1 即可重新编译；加 -Test 可运行自测。
-图标由 make_icon.py 绘制，只有重新生成图标时才需要 Pillow。
-
-1.1 更新：任务栏使用独立应用图标；界面采用紧凑布局。查找时按钮会变为“停止”。
-高级操作和完整报告位于右下角“更多”菜单。
-
-1.2 更新：补齐 Windows 任务栏使用的图标路径及重新打开信息，修复标题栏有图标但任务栏显示通用图标的问题。无需清理系统图标缓存。
+Repository: https://github.com/lamiqsnp-crypto/LockLens
+Download: https://github.com/lamiqsnp-crypto/LockLens/releases/latest
+Build: powershell -File .\build.ps1
+Build and test: powershell -File .\build.ps1 -Test
